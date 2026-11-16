@@ -26,3 +26,6 @@ class Config:
     TICKET_SIGNING_KEY = os.environ.get("TICKET_SIGNING_KEY", "")
     AES_KEY_HEX = os.environ.get("AES_KEY_HEX", "")
     LOG_FILE = os.environ.get("LOG_FILE", "app.log")
+    SECRET_KEY = os.environ.get("SECRET_KEY", "")
+    COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
+    
