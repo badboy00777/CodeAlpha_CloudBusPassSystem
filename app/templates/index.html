@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Fares - Cloud Bus Pass{% endblock %}
+{% block content %}
+<section class="hero">
+    <h1>Cloud Bus Pass</h1>
+    <p>Book your bus pass online. Every ticket is saved, signed and priced by the server.</p>
+</section>
+<div id="msg" class="hidden" role="status"></div>
+<p class="muted">These prices come from the server fare table. The browser never decides the price.</p>
+<div id="fares" class="grid"></div>
+<div id="concessions"></div>
+{% endblock %}
+{% block script %}
+<script>
+    (async function () {
+        const box = document.getElementById('fares');
+        const msg = document.getElementById('msg');
+        const conc = document.getElementById('concessions');
+        const r = await api('GET', '/api/fares');
+        if (r.status !== 200) {
+            say(msg, 'err', 'Could not load fares. Please refresh the page.');
+            return;
+        }
+        r.data.routes.forEach(function (route) {
+            const card = el('section', 'card');
+            card.appendChild(el('h3', '', route.code + ': ' + route.origin + ' to ' + route.destination));
+            const table = el('table', 'fares');
+            const thead = el('thead');
+            const headRow = el('tr');
+            ['Pass', 'Days', 'Price'].forEach(function (h) { headRow.appendChild(el('th', '', h)); });
+            thead.appendChild(headRow);
+            table.appendChild(thead);
+            const tbody = el('tbody');
+            route.fares.forEach(function (f) {
+                const row = el('tr');
+                row.appendChild(el('td', '', f.pass_type));
+                row.appendChild(el('td', '', String(f.duration_days)));
+                row.appendChild(el('td', '', 'PKR ' + f.price_pkr));
+                tbody.appendChild(row);
+            });
+            table.appendChild(tbody);
+            card.appendChild(table);
+            box.appendChild(card);
+        });
+        const offers = r.data.concessions.filter(function (c) { return c.percent_off > 0; });
+        if (offers.length) {
+            const text = offers.map(function (c) { return c.code + ' ' + c.percent_off + '% off'; }).join(', ');
+            conc.appendChild(el('p', 'muted', 'Concessions: ' + text + '.'));
+        }
+    })();
+</script>
+{% endblock %}

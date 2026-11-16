@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Conductor - Cloud Bus Pass{% endblock %}
+{% block content %}
+<h1>Conductor: validate a ticket</h1>
+<div id="msg" class="hidden" role="status"></div>
+<section class="card">
+    <div class="field">
+        <label for="code">Ticket code</label>
+        <input id="code" type="text" maxlength="200" autocomplete="off" placeholder="Paste the passenger's ticket code">
+        <div class="hint">A ticket is accepted only once. A copied or edited code is rejected.</div>
+    </div>
+    <button class="btn" type="button" id="validate-btn">Validate ticket</button>
+    <div id="result"></div>
+</section>
+{% endblock %}
+{% block script %}
+<script>
+    requireLogin(function (user) {
+        const msg = document.getElementById('msg');
+        const input = document.getElementById('code');
+        const button = document.getElementById('validate-btn');
+        const result = document.getElementById('result');
+        if (user.role !== 'conductor') {
+            say(msg, 'err', 'This page is only for conductors.');
+            button.disabled = true;
+            input.disabled = true;
+            return;
+        }
+        button.addEventListener('click', async function () {
+            clear(result);
+            hideMsg(msg);
+            const code = input.value.trim();
+            if (!code) {
+                say(msg, 'err', 'Paste a ticket code first.');
+                return;
+            }
+            button.disabled = true;
+            const r = await api('POST', '/api/conductor/validate', { ticket_code: code });
+            button.disabled = false;
+            if (r.status === 200 && r.data.valid) {
+                const b = r.data.booking;
+                const box = el('div', 'verdict verdict-ok');
+                box.appendChild(el('strong', '', 'VALID: passenger may board'));
+                box.appendChild(el('div', '', b.route_code + ': ' + b.origin + ' to ' + b.destination));
+                box.appendChild(el('div', '', b.pass_type + ', valid until ' + b.valid_until));
+                result.appendChild(box);
+            } else {
+                const reason = r.status === 409 ? 'ticket already used' : (r.data.error || 'invalid ticket');
+                const box = el('div', 'verdict verdict-bad');
+                box.appendChild(el('strong', '', 'REJECTED: ' + reason));
+                result.appendChild(box);
+            }
+        });
+    });
+</script>
+{% endblock %}

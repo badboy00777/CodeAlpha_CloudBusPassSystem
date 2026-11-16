@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}My tickets - Cloud Bus Pass{% endblock %}
+{% block content %}
+<h1>My tickets</h1>
+<p class="muted">Every booking is saved in the database, so you can see your tickets again anytime, on any device.</p>
+<div id="msg" class="hidden" role="status"></div>
+<div id="list"></div>
+{% endblock %}
+{% block script %}
+<script>
+    requireLogin(async function () {
+        const msg = document.getElementById('msg');
+        const list = document.getElementById('list');
+        const r = await api('GET', '/api/bookings');
+        if (r.status !== 200) {
+            say(msg, 'err', r.data.error || 'Could not load your tickets.');
+            return;
+        }
+        const bookings = r.data.bookings;
+        if (!bookings.length) {
+            say(msg, 'info', 'You have no tickets yet. Use Book a pass to get one.');
+            return;
+        }
+        bookings.forEach(function (b) { list.appendChild(renderTicket(b)); });
+    });
+</script>
+{% endblock %}
