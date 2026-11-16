@@ -92,3 +92,71 @@ def booking_count(conn):
         return n
 
     return _count
+
+from app.security import hash_password
+
+
+@pytest.fixture
+def flask_app(conn, tmp_path):
+    from app import create_app
+
+    application = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "test-secret-key-for-sessions",
+            "TICKET_SIGNING_KEY": "unit-test-signing-key-not-a-real-secret",
+            "AES_KEY_HEX": "ab" * 32,
+            "LOG_FILE": str(tmp_path / "app.log"),
+        }
+    )
+    yield application
+    for handler in list(application.logger.handlers):
+        handler.close()
+        application.logger.removeHandler(handler)
+
+
+@pytest.fixture
+def client(flask_app):
+    return flask_app.test_client()
+
+
+@pytest.fixture
+def log_text(flask_app):
+    path = Path(flask_app.config["LOG_FILE"])
+
+    def _read():
+        for handler in flask_app.logger.handlers:
+            handler.flush()
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    return _read
+
+
+@pytest.fixture
+def signup(flask_app):
+    def _signup(name="Ali Raza", email=None, password="Bus12345", phone="+923001234567"):
+        email = email or f"{uuid.uuid4().hex[:10]}@example.com"
+        c = flask_app.test_client()
+        r = c.post("/api/register", json={"full_name": name, "email": email,
+                                          "password": password, "phone": phone})
+        assert r.status_code == 201, r.get_json()
+        r = c.post("/api/login", json={"email": email, "password": password})
+        assert r.status_code == 200, r.get_json()
+        return c
+
+    return _signup
+
+
+@pytest.fixture
+def conductor(flask_app, conn):
+    email = "conductor@example.com"
+    with conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO users (full_name, email, password_hash, role) VALUES (%s, %s, %s, 'conductor')",
+            ("Bilal Ahmed", email, hash_password("Conduct123")),
+        )
+    conn.commit()
+    c = flask_app.test_client()
+    r = c.post("/api/login", json={"email": email, "password": "Conduct123"})
+    assert r.status_code == 200, r.get_json()
+    return c
