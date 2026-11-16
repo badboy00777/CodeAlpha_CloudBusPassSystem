@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Book a pass - Cloud Bus Pass{% endblock %}
+{% block content %}
+<h1>Book a bus pass</h1>
+<div id="msg" class="hidden" role="status"></div>
+<section class="card">
+    <form id="book-form">
+        <div class="field">
+            <label for="route">Route</label>
+            <select id="route"></select>
+        </div>
+        <div class="field">
+            <label for="pass-type">Pass type</label>
+            <select id="pass-type"></select>
+        </div>
+        <div class="field">
+            <label for="concession">Concession</label>
+            <select id="concession"></select>
+        </div>
+        <div class="field">
+            <label for="travel-date">First day of travel</label>
+            <input id="travel-date" type="date" required>
+            <div class="hint">Up to 30 days ahead.</div>
+        </div>
+        <div id="price-box" class="price-box" aria-live="polite">Choose your options.</div>
+        <button class="btn" type="submit" id="book-btn">Confirm booking</button>
+    </form>
+</section>
+<div id="result"></div>
+{% endblock %}
+{% block script %}
+<script>
+    requireLogin(async function () {
+        const form = document.getElementById('book-form');
+        const routeSel = document.getElementById('route');
+        const passSel = document.getElementById('pass-type');
+        const concSel = document.getElementById('concession');
+        const dateInp = document.getElementById('travel-date');
+        const priceBox = document.getElementById('price-box');
+        const button = document.getElementById('book-btn');
+        const msg = document.getElementById('msg');
+        const result = document.getElementById('result');
+        let attemptKey = newKey();
+        let quoteSeq = 0;
+
+        dateInp.min = localDate(0);
+        dateInp.max = localDate(30);
+        dateInp.value = localDate(1);
+
+        const r = await api('GET', '/api/fares');
+        if (r.status !== 200) {
+            say(msg, 'err', 'Could not load fares. Please refresh the page.');
+            button.disabled = true;
+            return;
+        }
+        const fares = r.data;
+        fares.routes.forEach(function (route) {
+            const o = el('option', '', route.code + ': ' + route.origin + ' to ' + route.destination);
+            o.value = route.code;
+            routeSel.appendChild(o);
+        });
+        fares.concessions.forEach(function (c) {
+            const name = c.code.charAt(0).toUpperCase() + c.code.slice(1);
+            const label = c.code === 'none' ? 'No concession' : name + ' (' + c.percent_off + '% off)';
+            const o = el('option', '', label);
+            o.value = c.code;
+            concSel.appendChild(o);
+        });
+
+        function fillPassTypes() {
+            clear(passSel);
+            const route = fares.routes.find(function (x) { return x.code === routeSel.value; });
+            route.fares.forEach(function (f) {
+                const days = f.duration_days === 1 ? ' day' : ' days';
+                const o = el('option', '', f.pass_type + ' (' + f.duration_days + days + ')');
+                o.value = f.pass_type;
+                passSel.appendChild(o);
+            });
+        }
+
+        async function refreshQuote() {
+            quoteSeq += 1;
+            const seq = quoteSeq;
+            priceBox.textContent = 'Calculating price...';
+            const q = await api('POST', '/api/quote', {
+                route: routeSel.value,
+                pass_type: passSel.value,
+                concession: concSel.value
+            });
+            if (seq !== quoteSeq) { return; }
+            clear(priceBox);
+            if (q.status === 200) {
+                const d = q.data.quote;
+                priceBox.appendChild(el('span', 'price', 'PKR ' + d.price_pkr));
+                priceBox.appendChild(el('span', 'muted',
+                    'base PKR ' + d.base_price_pkr + ', discount ' + d.percent_off + '%. Calculated by the server.'));
+            } else {
+                priceBox.textContent = q.data.error || 'Could not get the price.';
+            }
+        }
+
+        function changed() {
+            attemptKey = newKey();
+            hideMsg(msg);
+            refreshQuote();
+        }
+
+        routeSel.addEventListener('change', function () { fillPassTypes(); changed(); });
+        passSel.addEventListener('change', changed);
+        concSel.addEventListener('change', changed);
+        dateInp.addEventListener('change', changed);
+
+        form.addEventListener('submit', async function (event) {
+            event.preventDefault();
+            button.disabled = true;
+            hideMsg(msg);
+            const res = await api('POST', '/api/bookings', {
+                route: routeSel.value,
+                pass_type: passSel.value,
+                concession: concSel.value,
+                travel_date: dateInp.value,
+                idempotency_key: attemptKey
+            });
+            button.disabled = false;
+            if (res.status === 201 || res.status === 200) {
+                const text = res.status === 201
+                    ? 'Booking confirmed and saved. You can open it again anytime in My tickets.'
+                    : 'This booking was already saved. Showing the same ticket.';
+                say(msg, 'ok', text);
+                clear(result);
+                result.appendChild(renderTicket(res.data.booking));
+                attemptKey = newKey();
+            } else if (res.status === 401) {
+                window.location.href = '/login';
+            } else {
+                say(msg, 'err', res.data.error || 'Something went wrong.');
+            }
+        });
+
+        fillPassTypes();
+        refreshQuote();
+    });
+</script>
+{% endblock %}

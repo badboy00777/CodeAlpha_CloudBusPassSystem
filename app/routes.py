@@ -1,8 +1,7 @@
 from functools import wraps
 
 import pymysql
-from flask import Blueprint, abort, current_app, jsonify, request, session
-
+from flask import Blueprint, abort, current_app, jsonify, render_template, request, session
 from app.booking import (
     SoldOutError,
     TicketUsedError,
@@ -84,6 +83,29 @@ def conductor_required(view):
         return view(*args, **kwargs)
 
     return wrapper
+@bp.get("/")
+def page_home():
+    return render_template("index.html")
+
+
+@bp.get("/login")
+def page_login():
+    return render_template("login.html")
+
+
+@bp.get("/book")
+def page_book():
+    return render_template("book.html")
+
+
+@bp.get("/tickets")
+def page_tickets():
+    return render_template("tickets.html")
+
+
+@bp.get("/conductor")
+def page_conductor():
+    return render_template("conductor.html")
 
 
 @bp.get("/health")
